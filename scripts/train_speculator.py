@@ -36,14 +36,14 @@ Usage
 import os, time, warnings, argparse, json, pickle
 import numpy as np
 import h5py
+import _cuda_preload  # noqa: F401  # must precede tensorflow: dlopens pip nvidia CUDA libs
 import tensorflow as tf
-from tqdm import trange
-from speculator import SpectrumPCA, Speculator
-
-warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────
 # GPU setup – maximise computational power
+# NOTE: memory growth must be configured before anything initializes the
+# eager context; the speculator import below builds TF objects at import
+# time, so this block has to run before it.
 # ─────────────────────────────────────────────────────────────
 os.environ["TF_GPU_THREAD_MODE"]    = "gpu_private"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "1"
@@ -51,6 +51,11 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "1"
 _gpus = tf.config.list_physical_devices("GPU")
 for _g in _gpus:
     tf.config.experimental.set_memory_growth(_g, True)
+
+from tqdm import trange
+from speculator import SpectrumPCA, Speculator
+
+warnings.filterwarnings("ignore")
 
 if len(_gpus) > 1:
     STRATEGY = tf.distribute.MirroredStrategy()
