@@ -20,4 +20,28 @@ in place rather than copied in:
   `EUCLID_DIR` in `scripts/eval_speculator.py`.
 
 `trained/` (model checkpoints) and `*.log` files are also excluded via
-`.gitignore` as build artifacts.
+`.gitignore` as build artifacts, **except** a minimal `trained/Inoue_IGM/`
+subset (3 per-band `model.npz` + `pca_basis.npz`, plus their tiny
+`val_{band}_wl.npy` wavelength grids) force-added and tracked via Git LFS —
+this is the frozen decoder `photoz_mlpvae`'s `PhotozMLPVAE.load()` needs at
+inference time, not the full ~34GB run directory.
+
+## Redshift range: zmax 5.5 → 6.5 (2026-08-12, DP2)
+
+`scripts/rerun_inoue_zmax6p5.sh` regenerates the Inoue-IGM SED train/val
+HDF5s at `ZMAX=6.5` (was 5.5) and retrains the Inoue speculator against
+them end-to-end (SED gen → HDF5 verify → PCA + NN retrain → eval), driven
+by `train_speculator.py`. Motivated by DP2's SOM-matched test set having
+spec-z up to ~8.3 — the old zmax=5.5 decoder couldn't represent SEDs for
+any galaxy above that, forcing `photoz_mlpvae`'s frozen-decoder branch to
+extrapolate far outside its training range for the whole high-z tail (see
+that repo's PLAN.md, Failure 13, for the downstream NaN chain this was
+half of).
+
+Old zmax=5.5 weights are kept at `trained/Inoue_IGM_zmax5p5_backup/` for
+reference/rollback. PCA dimensionality shifted with the wider range (e.g.
+band 0: 30→90 components), which changed `pca_basis.npz`'s on-disk shape —
+any `photoz_mlpvae` checkpoint trained against the old decoder needs
+`load()`'s shape-mismatch handling (added there) to keep decoding
+correctly against its own frozen weights rather than whatever is currently
+on disk here.
