@@ -1,22 +1,28 @@
 """
-_cuda_preload.py  (reconstructed stub, 2026-08-13)
-===================================================
-The original file was missing from disk (untracked, never committed to git
--- only its __pycache__ bytecode survived, compiled against a slightly
-different CPython 3.12 build so it couldn't be recovered by disassembly).
+_cuda_preload.py
+=================
+dlopen every shared library bundled inside the pip-installed `nvidia-*-cuXX`
+packages (cudnn, cublas, cufft, curand, cusolver, cusparse, nccl, etc.) with
+RTLD_GLOBAL, *before* `import tensorflow`. TF's pip wheel expects these on
+the dynamic linker search path, but pip installs them under
+site-packages/nvidia/<pkg>/lib/ instead with no RUNPATH pointing there --
+without this, TF silently falls back to CPU ("Cannot dlopen some GPU
+libraries. ... Skipping registering GPU devices").
 
-Its docstring-comment in train_speculator.py described it as dlopen-ing pip
--installed nvidia CUDA libs before `import tensorflow`, for GPU use. But
-scripts/rerun_inoue_zmax6p5.sh (the script that ran the last successful
-zmax=6.5 retrain) explicitly set CUDA_VISIBLE_DEVICES and noted "Speculator
-TF runs on CPU in this env; keep off the busy GPU regardless" -- i.e. that
-retrain already ran on CPU, not GPU. Verified: without this shim, TF simply
-falls back to CPU ("Cannot dlopen some GPU libraries ... Skipping
-registering GPU devices"), which is the same fallback the original run was
-already using. This stub exists only so `import _cuda_preload` doesn't
-crash train_speculator.py/eval_speculator.py; it intentionally does nothing.
-
-If GPU-accelerated Speculator training is wanted later, this needs real
-dlopen logic (e.g. ctypes.CDLL over each nvidia-*-cuXX wheel's lib/*.so*),
-not this stub.
+Reconstructed 2026-08-13: the original file (never committed to git) was
+gone from disk when a recovery retrain needed it; this is a from-scratch
+reimplementation of the documented approach (ctypes RTLD_GLOBAL preload of
+the pip nvidia cuXX libs), not a byte-for-byte recovery of the original.
+Verified restores `tf.config.list_physical_devices('GPU')` in this env.
 """
+import ctypes
+import glob
+import os
+import site
+
+for _sp in site.getsitepackages() + [site.getusersitepackages()]:
+    for _so in glob.glob(os.path.join(_sp, "nvidia", "*", "lib", "*.so*")):
+        try:
+            ctypes.CDLL(_so, mode=ctypes.RTLD_GLOBAL)
+        except OSError:
+            pass
